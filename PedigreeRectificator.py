@@ -8,17 +8,19 @@ from matplotlib.patches import Circle, Wedge, Polygon, Rectangle
 
 class PedigreeRectificator:
 
-    def __init__(self,df,**kwargs):
+    def __init__(self,df,workDir = './',**data):
         self.mother = None
         self.father = None
         self.child = None
+        self.args = data
+        self.workDir = workDir
         self.chromosomeSizes = rec_dd()
-        self.df = df
-        self.args = kwargs
-        self.workDir = self.args.outpath
-        self.setChromosomeRange()
+        self.gdf = df
+        self.df = pd.DataFrame()
+        self.getFiltredDf()
         self.genDict = self.dataSegmentation()
-        self.family = set(kwargs.keys())
+        self.setChromosomeRange()
+        self.family = set(data.keys())
         self.getRectificationCase()
         self.heterozygous = list()
         self.unknownOrigin = list()
@@ -36,8 +38,7 @@ class PedigreeRectificator:
         self.unknownMarkers = None
         self.lostMarkers = None
         self.getMarkerAncestry()
-
-        self.chrGuide =  [
+        self.chrGuide = chrGuide = [
         "Chr01",
         "Chr02",
         "Chr03",
@@ -50,7 +51,22 @@ class PedigreeRectificator:
         "Chr10",
         "Chr11"
         ]
+        
+    def getFiltredDf(self):
+        notIndNames = ['POS','CHR','Id', 'Reference', 'Alternative']
+        pedigreeArgs = ['p1', 'p2', 'p11', 'p12', 'p21', 'p22', 'child']
+        for i in pedigreeArgs:
+            name = self.args[i]
+            if name != None:
+                notIndNames.append(name)
+        self.df = self.gdf[notIndNames]
+        try:
+            self.df['PRED'] = self.gdf['PRED']
+        except KeyError:
+            pass
 
+        self.df = self.df.dropna()  
+    
     def getRectificationCase(self):
         if set(['p1', 'p2']).issubset(self.family):
             mother = self.genDict[self.args['p1']]
@@ -153,7 +169,8 @@ class PedigreeRectificator:
 
         for n,row in self.df.iterrows():
             for indName in indNames:
-                segmentedData[indName][row['CHR']][row['POS']] = set(row[indName].split("/")) 
+                if len(row[indName]) > 0:
+                    segmentedData[indName][row['CHR']][row['POS']] = set(row[indName].split("/")) 
 
         return segmentedData
     
@@ -180,7 +197,7 @@ class PedigreeRectificator:
             out.loc[n] = [chro[0],n+1, minBound, maxBound, markerCount, length]
             #print("%s\t %s\t %s\t %s\t %s pb"%(n+1, minBound, maxBound, markerCount, length))
         return(out.sort_values('Min_Bound'))
-    def getPossibleGenomeIntroBlocks(self,df,distance_threshold,distanceType):
+    def getPossibleGenomeIntroBlocks(self,df,distanceType='PRED',distance_threshold = 0.5):
     
         notGp = pd.DataFrame()
         gp = pd.DataFrame()
@@ -222,7 +239,7 @@ class PedigreeRectificator:
             chRegions = regions[regions['CHR'] == chromosome]
             count = 0 
             for n,row in chRegions.iterrows():
-                if row['Length'] > 0:
+                if row['Length'] >= 0:
                     formattedLength = "{:,}".format(row["Length"])
                     minBound = np.interp(row['Min_Bound'], (0, maxlim), (0, 10))
                     maxBound = np.interp(row['Max_Bound'], (0, maxlim), (0, 10))
@@ -280,6 +297,8 @@ def getMaxDicValue(sizes):
             maxi = sizes[i]
     return maxi
 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Get the unknown origin regions of a child genotype based in the two parents genotype.')
     parser.add_argument("file", help="This dataset must be a csv delimitted by tabs")
@@ -300,10 +319,9 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    df = pd.read_csv(args.file, sep='\t')
+    df = pd.read_csv(args.file, sep='\t')   
+    d = PedigreeRectificator(df, **args.__dict__)
 
-    d = PedigreeRectificator(df,*args._get_kwargs())
-    unk = d.getPossibleGenomeIntroBlocks(d.fatherMarkers[0], d.args.threshold,d.args.position)
 
 
 
