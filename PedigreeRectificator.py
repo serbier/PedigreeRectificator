@@ -12,7 +12,9 @@ class PedigreeRectificator:
         self.mother = None
         self.father = None
         self.child = None
+        self.pedigree = None
         self.args = data
+        self.distanceType = self.args['position']
         self.workDir = workDir
         self.chromosomeSizes = rec_dd()
         self.gdf = df
@@ -73,23 +75,28 @@ class PedigreeRectificator:
             father = self.genDict[self.args['p2']]
             child = self.genDict[self.args['child']]
             filtrMks = getInformativeMarkers(mother, father, child)
+            self.pedigree = "(%sx%s)" %(self.args['p1'],self.args['p2'])
 
         elif set(['p1', 'p21', 'p22']).issubset(self.family):
             mother = self.genDict[self.args['p1']]
             father = getExpectedGenotype( self.genDict[self.args['p21']], self.genDict[self.args['p22']])
             child = self.genDict[self.args['child']]
             filtrMks = getInformativeMarkers(mother, father, child)
+            self.pedigree = "%sX(%sx%s)" %(self.args['p1'],self.args['p21'],self.args['p22'])
 
         elif set(['p2', 'p11', 'p12']).issubset(self.family):
             father = self.genDict[self.args['p2']]
             mother = getExpectedGenotype( self.genDict[self.args['p11']], self.genDict[self.args['p12']])
             child = self.genDict[self.args['child']]
             filtrMks = getInformativeMarkers(mother, father, child)
+            self.pedigree = "%sX(%sx%s)" %(self.args['p11'],self.args['p12'],self.args['p2'])
         elif set(['p21', 'p22', 'p11', 'p12']).issubset(self.family):
             father = getExpectedGenotype( self.genDict[self.args['p21']], self.genDict[self.args['p22']])
             mother = getExpectedGenotype( self.genDict[self.args['p11']], self.genDict[self.args['p12']])
             child = self.genDict[self.args['child']]
             filtrMks = getInformativeMarkers(mother, father, child)
+            self.pedigree = "(%sx%s)X(%sx%s)" %(self.args['p11'],self.args['p12'],self.args['p21'],self.args['p22'])
+
         else:
             return False
         self.mother = filtrMks['p1'] 
@@ -197,14 +204,14 @@ class PedigreeRectificator:
             out.loc[n] = [chro[0],n+1, minBound, maxBound, markerCount, length]
             #print("%s\t %s\t %s\t %s\t %s pb"%(n+1, minBound, maxBound, markerCount, length))
         return(out.sort_values('Min_Bound'))
-    def getPossibleGenomeIntroBlocks(self,df,distanceType='PRED',distance_threshold = 0.5):
+    def getPossibleGenomeIntroBlocks(self,df,distance_threshold = 0.5):
     
         notGp = pd.DataFrame()
         gp = pd.DataFrame()
         for chromosome,chrDf in df.groupby('CHR'):
             try:
                 
-                gp = gp.append(self.getChrPossibleIntrogressionBlocks(chrDf, distance_threshold,distanceType))
+                gp = gp.append(self.getChrPossibleIntrogressionBlocks(chrDf, distance_threshold,self.distanceType))
 
             except ValueError:
                 notGp.append(chrDf)
@@ -216,7 +223,7 @@ class PedigreeRectificator:
             self.chromosomeSizes[chromosome] = self.df[self.df['CHR'] == chromosome]['POS'].max()
     
     def plotRegions(self, df, distance_threshold = 0.5, distanceType = 'PRED',margin = 1.0, width = 0.4, textPad = 1.1):
-        df = self.getPossibleGenomeIntroBlocks(df,distanceType = distanceType,distance_threshold=distance_threshold)[0]
+        df = self.getPossibleGenomeIntroBlocks(df,distance_threshold=distance_threshold)[0]
         fig = plt.figure(figsize=(20,11))
         ax = fig.add_subplot(111)
         pad = 1
@@ -262,6 +269,7 @@ class PedigreeRectificator:
         ax.set_xticklabels(["$%s$"%x for x in self.chromosomeSizes.keys()])
         ax.set_xlim(0,counter+margin)
         ax.set_ylim(-1,11)
+        plt.savefig(self.workDir+"%s.pdf"%self.pedigree,format='pdf')
             
 
 def getExpectedGenotype(p1,p2):
@@ -314,6 +322,8 @@ if __name__ == "__main__":
     parser.add_argument("--position", help="Method for especify the position of each marker", 
                             default="PRED"
                             ,choices = ["POS", "PRED"])
+    parser.add_argument("--plot", help="If true a chromosomes plot is generated showing the regions of unknown origin",
+                        choices = ["t", "f"], default='t')
 
     
 
@@ -321,6 +331,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     df = pd.read_csv(args.file, sep='\t')   
     d = PedigreeRectificator(df, **args.__dict__)
+
+    if args.plot == 't':
+        d.plotRegions(d.unknownMarkers[0])
 
 
 
